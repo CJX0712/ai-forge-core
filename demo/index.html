@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI-Forge — 验证优先的零依赖 AI 核心 · 晨星</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f5f6f8; color: #1c2733; line-height: 1.6; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 60px; }
+  header h1 { font-size: 26px; margin: 0 0 6px; }
+  header .sub { color: #5b6b7b; font-size: 14px; margin-bottom: 4px; }
+  .meta { font-size: 13px; color: #8a97a5; margin-bottom: 20px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; vertical-align: middle; }
+  .badge.ok { background: #e7f6ec; color: #1e8e4a; }
+  .badge.warn { background: #fdeceb; color: #c0392b; }
+  .ok-t { color: #1e8e4a; font-weight: 700; }
+  .no-t { color: #c0392b; font-weight: 700; }
+  section { background: #fff; border: 1px solid #e6e9ee; border-radius: 12px; padding: 20px 22px; margin-bottom: 22px; }
+  h2 { font-size: 18px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 10px 8px; border-bottom: 1px solid #eef1f4; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .sub { color: #6b7889; font-size: 12.5px; margin-top: 3px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 720px){ .grid { grid-template-columns: 1fr; } }
+  canvas { width: 100%; }
+  .cap { font-size: 12.5px; color: #8a97a5; margin-top: 6px; }
+  code { background: #eef1f4; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  a { color: #2563eb; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI-Forge <span id="test-badge" class="badge ok">…</span></h1>
+    <div class="sub">验证优先的零依赖 AI 核心 — 每个算法用「数学不变量」自证正确性</div>
+    <div class="meta">作者 <b>晨星</b> · MIT · 零依赖零构建 · 本页为单文件，所有计算在浏览器本地完成</div>
+  </header>
+
+  <section>
+    <h2>① 数学不变量自检 <span class="sub" style="display:inline">重构误差/正交性 ~1e-9，梯度检验 maxRelErr&lt;1e-4</span></h2>
+    <table>
+      <thead><tr><td style="width:52px"><b>状态</b></td><td><b>算法 / 不变量</b></td></tr></thead>
+      <tbody id="test-body"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>② 实时演示 — 浏览器内训练与推理</h2>
+    <div class="grid">
+      <div>
+        <div><b>逻辑回归 + Adam</b> <span class="cap">损失单调下降 (Kingma & Ba 2015)</span></div>
+        <canvas id="loss-canvas"></canvas>
+      </div>
+      <div>
+        <div><b>Transformer 自注意力</b> <span class="cap">注意力权重矩阵 A = softmax(QKᵀ/√d)</span></div>
+        <canvas id="attn-canvas"></canvas>
+      </div>
+    </div>
+    <p class="cap">全部由本页内联的纯 JS 引擎实时计算，无任何网络请求、无外部脚本。</p>
+  </section>
+
+  <section>
+    <h2>③ 溯源 — 站在世界顶级成果之上</h2>
+    <table>
+      <tbody>
+        <tr><td><code>Cholesky / QR / Jacobi / SVD</code></td><td>Golub &amp; Van Loan《Matrix Computations》· LAPACK · Eckart–Young</td></tr>
+        <tr><td><code>Adam</code></td><td>Kingma &amp; Ba, ICLR 2015</td></tr>
+        <tr><td><code>k-means++ / Lloyd</code></td><td>Arthur &amp; Vassilvitskii 2007</td></tr>
+        <tr><td><code>自注意力 / Transformer</code></td><td>Vaswani et al. 2017 (Attention Is All You Need)</td></tr>
+        <tr><td><code>梯度检验</code></td><td>中心差分数值微分 · CS231n 规范</td></tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<script>
+/*
+ * AI-Forge — Verification-First Zero-Dependency AI Core
+ * ------------------------------------------------------------------
+ * 站在世界顶级数学/算法之上，禁止从零造轮子：
+ *   - 矩阵分解: Cholesky / Householder QR / Jacobi 特征值 (溯源 LAPACK, Golub & Van Loan 1996)
+ *   - SVD: 经 AᵀA 对称特征值，Eckart–Young 最优低秩重构
+ *   - 优化: Adam (Kingma & Ba 2015)
+ *   - 模型: 线性回归(正规方程)/逻辑回归/PCA/k-means(k-means++)/k-NN/朴素贝叶斯/MLP/Transformer 自注意力
+ *   - 验证: 每个算法用「数学不变量」自证正确性 —— 梯度检验 1e-7、正交性、重构误差、残差正交、惯性单调
+ *
+ * 零依赖、零构建。Node 与浏览器同源：require() 或 <script> 均可。
+ * 作者: 晨星 (CJX0712)  MIT License
+ */
+(function (root) {
+  'use strict';
+
+  // ============================================================
+  // 0. 基础工具 & 确定性随机数 (mulberry32, 保证可复现)
+  // ============================================================
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function randn(rng) {
+    let u = 0, v = 0;
+    while (u === 0) u = rng();
+    while (v === 0) v = rng();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  const zeros = (n, m) => Array.from({ length: n }, () => new Array(m).fill(0));
+  const eye = (n) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+  const transpose = (A) => Array.from({ length: A[0].length }, (_, j) => A.map(r => r[j]));
+  const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+  const matmul = (A, B) => {
+    const m = A.length, k = B.length, n = B[0].length;
+    const C = zeros(m, n);
+    for (let i = 0; i < m; i++)
+      for (let p = 0; p < k; p++) {
+        const aip = A[i][p];
+        if (aip === 0) continue;
+        const Bp = B[p];
+        const Ci = C[i];
+        for (let j = 0; j < n; j++) Ci[j] += aip * Bp[j];
+      }
+    return C;
+  };
+  const matVec = (A, v) => A.map(r => dot(r, v));
+  const add = (A, B) => A.map((r, i) => r.map((v, j) => v + B[i][j]));
+  const sub = (A, B) => A.map((r, i) => r.map((v, j) => v - B[i][j]));
+  const scale = (A, s) => A.map(r => r.map(v => v * s));
+  const matNorm = (A) => { let s = 0; for (const r of A) for (const v of r) s += v * v; return Math.sqrt(s); };
+  const matDiffNorm = (A, B) => matNorm(sub(A, B));
+  const flatMat = (M) => { const a = []; for (const r of M) for (const v of r) a.push(v); return a; };
+  const unflatMat = (a, rows, cols) => {
+    const M = []; let k = 0;
+    for (let i = 0; i < rows; i++) { const r = []; for (let j = 0; j < cols; j++) r.push(a[k++]); M.push(r); }
+    return M;
+  };
+  const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+  const softmaxRows = (M) => M.map(r => {
+    const m = Math.max(...r);
+    const e = r.map(v => Math.exp(v - m));
+    const s = e.reduce((a, b) => a + b, 0);
+    return e.map(v => v / s);
+  });
+  const sqDist = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return s; };
+
+  // ============================================================
+  // 1. 线性代数 — 世界顶级分解
+  // ============================================================
+
+  // Cholesky: A = L Lᵀ  (对称正定). 溯源 LAPACK dpotrf.
+  function cholesky(A) {
+    const n = A.length;
+    const L = zeros(n, n);
+    for (let j = 0; j < n; j++) {
+      let s = 0;
+      for (let k = 0; k < j; k++) s += L[j][k] * L[j][k];
+      L[j][j] = Math.sqrt(Math.max(A[j][j] - s, 1e-18));
+      for (let i = j + 1; i < n; i++) {
+        let s2 = 0;
+        for (let k = 0; k < j; k++) s2 += L[i][k] * L[j][k];
+        L[i][j] = (A[i][j] - s2) / L[j][j];
+      }
+    }
+    return L;
+  }
+  function choleskySolve(L, b) {
+    const n = L.length;
+    const y = new Array(n).fill(0), x = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) { let s = b[i]; for (let k = 0; k < i; k++) s -= L[i][k] * y[k]; y[i] = s / L[i][i]; }
+    for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let k = i + 1; k < n; k++) s -= L[k][i] * x[k]; x[i] = s / L[i][i]; }
+    return x;
+  }
+
+  // Householder QR: A = Q R, Q 正交. 溯源 Golub & Van Loan, §5.2.
+  function qr(A) {
+    const m = A.length, n = A[0].length;
+    const Q = eye(m), R = A.map(r => r.slice());
+    for (let k = 0; k < n; k++) {
+      const x = []; for (let i = k; i < m; i++) x.push(R[i][k]);
+      let normx = Math.sqrt(x.reduce((s, v) => s + v * v, 0));
+      if (normx < 1e-14) continue;
+      const sign = x[0] < 0 ? -1 : 1;
+      const u0 = x[0] + sign * normx;
+      const u = x.slice(); u[0] = u0;
+      const unorm = Math.sqrt(u.reduce((s, v) => s + v * v, 0));
+      const v = u.map(vv => vv / unorm);
+      for (let j = k; j < n; j++) {
+        let dot = 0; for (let i = k; i < m; i++) dot += v[i - k] * R[i][j];
+        for (let i = k; i < m; i++) R[i][j] -= 2 * dot * v[i - k];
+      }
+      for (let j = 0; j < m; j++) {
+        let dot = 0; for (let i = k; i < m; i++) dot += v[i - k] * Q[j][i];
+        for (let i = k; i < m; i++) Q[j][i] -= 2 * dot * v[i - k];
+      }
+    }
+    return { Q, R };
+  }
+
+  // Jacobi 特征值: 对称矩阵 → 特征值 + 正交特征向量. 溯源 Jacobi 1846 / Golub & Van Loan §8.5.
+  function jacobiEigen(A, maxSweeps = 100, tol = 1e-12) {
+    const n = A.length;
+    const a = A.map(r => r.slice());
+    const V = eye(n);
+    for (let sweep = 0; sweep < maxSweeps; sweep++) {
+      let off = 0;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += a[p][q] * a[p][q];
+      if (Math.sqrt(2 * off) < tol) break;
+      for (let p = 0; p < n; p++) {
+        for (let q = p + 1; q < n; q++) {
+          if (Math.abs(a[p][q]) < 1e-300) continue;
+          const phi = 0.5 * Math.atan2(2 * a[p][q], a[q][q] - a[p][p]);
+          const c = Math.cos(phi), s = Math.sin(phi);
+          for (let i = 0; i < n; i++) {
+            const aip = a[i][p], aiq = a[i][q];
+            a[i][p] = c * aip - s * aiq; a[i][q] = s * aip + c * aiq;
+          }
+          for (let i = 0; i < n; i++) {
+            const api = a[p][i], aqi = a[q][i];
+            a[p][i] = c * api - s * aqi; a[q][i] = s * api + c * aqi;
+          }
+          for (let i = 0; i < n; i++) {
+            const vip = V[i][p], viq = V[i][q];
+            V[i][p] = c * vip - s * viq; V[i][q] = s * vip + c * viq;
+          }
+        }
+      }
+    }
+    const values = []; for (let i = 0; i < n; i++) values.push(a[i][i]);
+    return { values, vectors: V }; // V 的列是特征向量
+  }
+
+  // SVD 薄分解: A = U Σ Vᵀ. 经 AᵀA 特征值 (Eckart–Young 最优性).
+  function svd(A) {
+    const m = A.length, n = A[0].length;
+    const AtA = matmul(transpose(A), A);
+    const { values, vectors: V } = jacobiEigen(AtA);
+    const order = [...Array(n).keys()].sort((i, j) => values[j] - values[i]);
+    const S = order.map(i => Math.sqrt(Math.max(values[i], 0)));
+    const Vm = order.map(i => V.map(row => row[i])); // 列 = 降序特征向量
+    const U = zeros(m, n);
+    for (let i = 0; i < n; i++) {
+      const vi = Vm.map(row => row[i]);
+      const Avi = matVec(A, vi);
+      const s = S[i];
+      const ui = s > 1e-12 ? Avi.map(x => x / s) : Avi.map(() => 0);
+      for (let r = 0; r < m; r++) U[r][i] = ui[r];
+    }
+    return { U, S, V: Vm };
+  }
+
+  // ============================================================
+  // 2. 优化 — Adam (Kingma & Ba 2015)
+  // ============================================================
+  function adam(params, grads, state, lr = 0.01, beta1 = 0.9, beta2 = 0.999, eps = 1e-8) {
+    if (!state.m) { state.m = params.map(() => 0); state.v = params.map(() => 0); state.t = 0; }
+    state.t++;
+    for (let i = 0; i < params.length; i++) {
+      state.m[i] = beta1 * state.m[i] + (1 - beta1) * grads[i];
+      state.v[i] = beta2 * state.v[i] + (1 - beta2) * grads[i] * grads[i];
+      const mh = state.m[i] / (1 - Math.pow(beta1, state.t));
+      const vh = state.v[i] / (1 - Math.pow(beta2, state.t));
+      params[i] -= lr * mh / (Math.sqrt(vh) + eps);
+    }
+    return params;
+  }
+
+  // 数值梯度检验 (中心差分) — 验证任意解析梯度实现
+  function gradientCheck(lossFn, analyticGrad, eps = 1e-6) {
+    let maxRel = 0;
+    for (let i = 0; i < analyticGrad.length; i++) {
+      // 用闭包捕获的当前参数: lossFn(p) 接受扰动后的参数向量
+      const base = lossFn.base.slice();
+      const b1 = base.slice(); b1[i] += eps;
+      const b2 = base.slice(); b2[i] -= eps;
+      const lp = lossFn(b1), lm = lossFn(b2);
+      const num = (lp - lm) / (2 * eps);
+      const ana = analyticGrad[i];
+      const denom = Math.max(1e-8, Math.abs(num) + Math.abs(ana));
+      const rel = Math.abs(num - ana) / denom;
+      if (rel > maxRel) maxRel = rel;
+    }
+    return maxRel;
+  }
+
+  // ============================================================
+  // 3. 监督/无监督模型
+  // ============================================================
+
+  // 线性回归 — 正规方程 + Cholesky 解 (λ 岭回归). 不变量: 残差 ⊥ X.
+  function linregFit(X, y, lambda = 0) {
+    const N = X.length, d = X[0].length;
+    const Xb = X.map(r => [...r, 1]);
+    const Xt = transpose(Xb);
+    const XtX = matmul(Xt, Xb);
+    for (let i = 0; i < d + 1; i++) XtX[i][i] += lambda;
+    const Xty = matVec(Xt, y);
+    const L = cholesky(XtX);
+    const theta = choleskySolve(L, Xty);
+    return {
+      theta,
+      predict: (Xq) => Xq.map(r => dot([...r, 1], theta))
+    };
+  }
+
+  // 逻辑回归 — sigmoid + BCE + Adam. 梯度检验不变量.
+  function logisticLoss(w, X, y) {
+    let L = 0;
+    for (let i = 0; i < X.length; i++) {
+      const z = dot([...X[i], 1], w);
+      const p = sigmoid(z);
+      L += -(y[i] * Math.log(p + 1e-15) + (1 - y[i]) * Math.log(1 - p + 1e-15));
+    }
+    return L / X.length;
+  }
+  function logisticGrad(w, X, y) {
+    const g = new Array(w.length).fill(0);
+    for (let i = 0; i < X.length; i++) {
+      const z = dot([...X[i], 1], w);
+      const err = sigmoid(z) - y[i];
+      const xb = [...X[i], 1];
+      for (let j = 0; j < w.length; j++) g[j] += err * xb[j];
+    }
+    for (let j = 0; j < w.length; j++) g[j] /= X.length;
+    return g;
+  }
+  function logisticFit(X, y, opts = {}) {
+    const d = X[0].length;
+    const w = new Array(d + 1).fill(0);
+    const lr = opts.lr || 0.1, iters = opts.iters || 3000;
+    const state = {};
+    for (let it = 0; it < iters; it++) {
+      const g = logisticGrad(w, X, y);
+      adam(w, g, state, lr);
+    }
+    return { w, predict: (Xq) => Xq.map(r => (sigmoid(dot([...r, 1], w)) > 0.5 ? 1 : 0)) };
+  }
+
+  // k-means — k-means++ 初始化 + Lloyd 迭代. 不变量: 惯性单调不增.
+  function kmeans(X, k, opts = {}) {
+    const N = X.length, d = X[0].length;
+    const rng = mulberry32(opts.seed || 7);
+    const centers = [X[Math.floor(rng() * N)].slice()];
+    while (centers.length < k) {
+      const dists = X.map(p => Math.min(...centers.map(c => sqDist(p, c))));
+      const sum = dists.reduce((a, b) => a + b, 0);
+      let r = rng() * sum, idx = 0;
+      for (let i = 0; i < N; i++) { r -= dists[i]; if (r <= 0) { idx = i; break; } }
+      centers.push(X[idx].slice());
+    }
+    let assign = new Array(N).fill(0), inertia = Infinity;
+    const inertias = [];
+    for (let it = 0; it < (opts.iters || 100); it++) {
+      let newIn = 0;
+      for (let i = 0; i < N; i++) {
+        let best = 0, bd = Infinity;
+        for (let c = 0; c < k; c++) { const dd = sqDist(X[i], centers[c]); if (dd < bd) { bd = dd; best = c; } }
+        assign[i] = best; newIn += bd;
+      }
+      inertias.push(newIn);
+      const sumC = Array.from({ length: k }, () => new Array(d).fill(0)), cnt = new Array(k).fill(0);
+      for (let i = 0; i < N; i++) { const c = assign[i]; for (let j = 0; j < d; j++) sumC[c][j] += X[i][j]; cnt[c]++; }
+      for (let c = 0; c < k; c++) if (cnt[c] > 0) for (let j = 0; j < d; j++) centers[c][j] = sumC[c][j] / cnt[c];
+      if (Math.abs(newIn - inertia) < 1e-9) break;
+      inertia = newIn;
+    }
+    return { centers, assign, inertia, inertias };
+  }
+
+  // k-NN — 暴力欧氏距离
+  function knnFit(X, y) { return { X, y }; }
+  function knnPredict(model, Xq, k) {
+    return Xq.map(q => {
+      const order = model.X.map((p, i) => ({ i, d: sqDist(p, q) })).sort((a, b) => a.d - b.d).slice(0, k);
+      const votes = new Map();
+      order.forEach(({ i }) => { const c = model.y[i]; votes.set(c, (votes.get(c) || 0) + 1); });
+      let best = null, bestN = -1;
+      votes.forEach((n, c) => { if (n > bestN) { bestN = n; best = c; } });
+      return best;
+    });
+  }
+
+  // PCA — 协方差 Jacobi 特征值. 不变量: 主成分标准正交, 低秩重构最优.
+  function pca(X, dims) {
+    const N = X.length, d = X[0].length;
+    const mean = new Array(d).fill(0);
+    X.forEach(r => { for (let j = 0; j < d; j++) mean[j] += r[j]; });
+    for (let j = 0; j < d; j++) mean[j] /= N;
+    const Xc = X.map(r => r.map((v, j) => v - mean[j]));
+    const cov = scale(matmul(transpose(Xc), Xc), 1 / (N - 1));
+    const { values, vectors } = jacobiEigen(cov);
+    const order = [...Array(d).keys()].sort((i, j) => values[j] - values[i]);
+    const comps = order.slice(0, dims).map(i => vectors.map(row => row[i])); // [dims][d]
+    const total = values.reduce((a, b) => a + b, 0);
+    const explained = order.slice(0, dims).reduce((s, i) => s + values[i], 0) / total;
+    const transform = (Xq) => Xq.map(r => {
+      const rc = r.map((v, j) => v - mean[j]);
+      return comps.map(c => dot(c, rc));
+    });
+    return { comps, transform, explained, mean, values, order };
+  }
+
+  // 朴素贝叶斯 (高斯) — 不变量: 后验 = 先验 × 似然, 归一化.
+  function nbFit(X, y) {
+    const classes = [...new Set(y)];
+    const stats = {};
+    classes.forEach(c => {
+      const rows = X.filter((_, i) => y[i] === c);
+      const d = X[0].length;
+      const mean = new Array(d).fill(0), varr = new Array(d).fill(0);
+      rows.forEach(r => { for (let j = 0; j < d; j++) mean[j] += r[j]; });
+      for (let j = 0; j < d; j++) mean[j] /= rows.length;
+      rows.forEach(r => { for (let j = 0; j < d; j++) { const e = r[j] - mean[j]; varr[j] += e * e; } });
+      for (let j = 0; j < d; j++) varr[j] = Math.max(varr[j] / rows.length, 1e-9);
+      stats[c] = { mean, varr, n: rows.length };
+    });
+    const prior = {}; classes.forEach(c => prior[c] = stats[c].n / X.length);
+    return {
+      classes, stats, prior,
+      predict: (Xq) => Xq.map(r => {
+        let best = null, bs = -Infinity;
+        classes.forEach(c => {
+          let logp = Math.log(prior[c]);
+          const { mean, varr } = stats[c];
+          for (let j = 0; j < r.length; j++) {
+            const e = r[j] - mean[j];
+            logp += -0.5 * Math.log(2 * Math.PI * varr[j]) - 0.5 * e * e / varr[j];
+          }
+          if (logp > bs) { bs = logp; best = c; }
+        });
+        return best;
+      })
+    };
+  }
+
+  // ============================================================
+  // 4. 深度模型 — MLP (手写反向传播) & Transformer 自注意力
+  // ============================================================
+
+  // MLP: [d] -> relu -> [h] -> softmax -> [c]
+  function mlpForward(X, P) {
+    const z1 = matmul(X, P.W1);
+    for (let i = 0; i < z1.length; i++) for (let j = 0; j < z1[0].length; j++) z1[i][j] += P.b1[j];
+    const a1 = z1.map(r => r.map(v => Math.max(0, v)));
+    const z2 = matmul(a1, P.W2);
+    for (let i = 0; i < z2.length; i++) for (let j = 0; j < z2[0].length; j++) z2[i][j] += P.b2[j];
+    const a2 = softmaxRows(z2);
+    return { z1, a1, z2, a2 };
+  }
+  function mlpLoss(X, y, P) {
+    const { a2 } = mlpForward(X, P);
+    let L = 0;
+    for (let i = 0; i < X.length; i++)
+      for (let k = 0; k < y[i].length; k++) if (y[i][k] > 0) L -= Math.log(a2[i][k] + 1e-15);
+    return L / X.length;
+  }
+  function mlpGrad(X, y, P) {
+    const N = X.length;
+    const { z1, a1, a2 } = mlpForward(X, P);
+    const dz2 = a2.map((r, i) => r.map((v, k) => v - y[i][k]));
+    const dW2 = scale(matmul(transpose(a1), dz2), 1 / N);
+    const db2 = new Array(dz2[0].length).fill(0);
+    for (let i = 0; i < N; i++) for (let k = 0; k < dz2[0].length; k++) db2[k] += dz2[i][k] / N;
+    const da1 = matmul(dz2, transpose(P.W2));
+    const dz1 = da1.map((r, i) => r.map((v, j) => v * (z1[i][j] > 0 ? 1 : 0)));
+    const dW1 = scale(matmul(transpose(X), dz1), 1 / N);
+    const db1 = new Array(dz1[0].length).fill(0);
+    for (let i = 0; i < N; i++) for (let k = 0; k < dz1[0].length; k++) db1[k] += dz1[i][k] / N;
+    return { W1: dW1, b1: db1, W2: dW2, b2: db2 };
+  }
+
+  // Transformer 自注意力 (单头 + 输出投影) — 手写前向/反向. 溯源 Vaswani et al. 2017.
+  function attnForward(X, P) {
+    const d = X[0].length;
+    const Q = matmul(X, P.Wq), K = matmul(X, P.Wk), V = matmul(X, P.Wv);
+    const S = matmul(Q, transpose(K));
+    for (let i = 0; i < S.length; i++) for (let j = 0; j < S[0].length; j++) S[i][j] /= Math.sqrt(d);
+    const A = softmaxRows(S);
+    const O = matmul(A, V);
+    const Y = matmul(O, P.Wo);
+    return { Q, K, V, S, A, O, Y };
+  }
+  function attnLoss(X, Tgt, P) {
+    const { Y } = attnForward(X, P);
+    let s = 0;
+    for (let i = 0; i < Y.length; i++) for (let j = 0; j < Y[0].length; j++) { const e = Y[i][j] - Tgt[i][j]; s += e * e; }
+    return 0.5 * s;
+  }
+  function attnGrad(X, Tgt, P) {
+    const d = X[0].length;
+    const { Q, K, V, A, O, Y } = attnForward(X, P);
+    const dY = Y.map((r, i) => r.map((v, j) => v - Tgt[i][j]));
+    const dWo = matmul(transpose(O), dY);
+    const dO = matmul(dY, transpose(P.Wo));
+    const dV = matmul(transpose(A), dO);
+    const dA = matmul(dO, transpose(V));
+    const dS = dA.map((row, i) => {
+      const a = A[i];
+      let sum = 0; for (let j = 0; j < a.length; j++) sum += row[j] * a[j];
+      return row.map((v, j) => a[j] * (v - sum));
+    });
+    const dQ = scale(matmul(dS, K), 1 / Math.sqrt(d));
+    const dK = scale(matmul(transpose(dS), Q), 1 / Math.sqrt(d));
+    const dWq = matmul(transpose(X), dQ);
+    const dWk = matmul(transpose(X), dK);
+    const dWv = matmul(transpose(X), dV);
+    return { Wq: dWq, Wk: dWk, Wv: dWv, Wo: dWo };
+  }
+
+  // ============================================================
+  // 5. 不变量自检注册表 (Verification-First 核心创新)
+  // ============================================================
+  const checks = [];
+  function register(name, fn) { checks.push({ name, fn }); }
+
+  function genLinear(seed, n = 80) {
+    const rng = mulberry32(seed);
+    const X = [], y = [];
+    const w = [1.5, -2.3];
+    for (let i = 0; i < n; i++) {
+      const x = [rng() * 4 - 2, rng() * 4 - 2];
+      const yt = w[0] * x[0] + w[1] * x[1] + 0.5 + randn(rng) * 0.05;
+      X.push(x); y.push(yt);
+    }
+    return { X, y };
+  }
+  function genBinary(seed, n = 60) {
+    const rng = mulberry32(seed);
+    const X = [], y = [];
+    for (let i = 0; i < n; i++) {
+      const lab = i % 2;
+      const x = [rng() * 2 + (lab ? 2 : 0), rng() * 2 + (lab ? 2 : 0)];
+      X.push(x); y.push(lab);
+    }
+    return { X, y };
+  }
+
+  register('Cholesky 分解 A=LLᵀ', () => {
+    const A = [[4, 2, 1], [2, 5, 3], [1, 3, 6]];
+    const L = cholesky(A);
+    const err = matDiffNorm(A, matmul(L, transpose(L)));
+    return [{ name: '重构误差 ‖A−LLᵀ‖', pass: err < 1e-9, detail: err.toExponential(2) }];
+  });
+
+  register('Householder QR: Q正交 & QR=A', () => {
+    const A = [[1, 2], [3, 4], [5, 6]];
+    const { Q, R } = qr(A);
+    const ortho = matDiffNorm(matmul(transpose(Q), Q), eye(3));
+    const recon = matDiffNorm(matmul(Q, R), A);
+    return [
+      { name: 'QᵀQ=I 误差', pass: ortho < 1e-9, detail: ortho.toExponential(2) },
+      { name: 'QR=A 误差', pass: recon < 1e-9, detail: recon.toExponential(2) }
+    ];
+  });
+
+  register('Jacobi 特征值: 正交特征向量', () => {
+    const S = [[2, 1, 0], [1, 3, 1], [0, 1, 4]];
+    const { values, vectors: V } = jacobiEigen(S);
+    const ortho = matDiffNorm(matmul(transpose(V), V), eye(3));
+    const SV = V.map(row => row.map((v, j) => v * values[j])); // 每列 j 按特征值 values[j] 缩放
+    const recon = matDiffNorm(matmul(S, V), SV);
+    return [
+      { name: 'VᵀV=I 误差', pass: ortho < 1e-9, detail: ortho.toExponential(2) },
+      { name: 'SV=VΛ 误差', pass: recon < 1e-7, detail: recon.toExponential(2) }
+    ];
+  });
+
+  register('SVD 薄分解 A=UΣVᵀ', () => {
+    const rng = mulberry32(11);
+    const A = Array.from({ length: 5 }, () => Array.from({ length: 4 }, () => randn(rng)));
+    const { U, S, V } = svd(A);
+    const n = A[0].length;
+    const Smat = zeros(n, n);
+    for (let i = 0; i < n; i++) Smat[i][i] = S[i];
+    const recon = matDiffNorm(A, matmul(matmul(U, Smat), transpose(V)));
+    return [{ name: '重构误差 ‖A−UΣVᵀ‖', pass: recon < 1e-7, detail: recon.toExponential(2) }];
+  });
+
+  register('线性回归: 残差 ⊥ X', () => {
+    const { X, y } = genLinear(123);
+    const { theta } = linregFit(X, y);
+    const Xb = X.map(r => [...r, 1]);
+    const pred = Xb.map(r => dot(r, theta));
+    const resid = y.map((v, i) => v - pred[i]);
+    let maxOrtho = 0;
+    for (let j = 0; j < Xb[0].length; j++) {
+      let s = 0; for (let i = 0; i < Xb.length; i++) s += Xb[i][j] * resid[i];
+      maxOrtho = Math.max(maxOrtho, Math.abs(s));
+    }
+    return [{ name: 'max|Xᵀr| 正交残差', pass: maxOrtho < 1e-6, detail: maxOrtho.toExponential(2) }];
+  });
+
+  register('逻辑回归: 梯度检验', () => {
+    const { X, y } = genBinary(456);
+    const rng = mulberry32(456);
+    const w = new Array(X[0].length + 1).fill(0).map(() => randn(rng) * 0.5); // 远离零梯度退化点
+    const base = w.slice();
+    const lossFn = (p) => { const cp = p.slice(); return logisticLoss(cp, X, y); };
+    lossFn.base = base;
+    const grad = logisticGrad(w, X, y);
+    const maxRel = gradientCheck(lossFn, grad);
+    return [{ name: '梯度检验 maxRelErr', pass: maxRel < 1e-4, detail: maxRel.toExponential(2) }];
+  });
+
+  register('k-means: 惯性单调不增', () => {
+    const rng = mulberry32(99);
+    const X = [];
+    for (let c = 0; c < 3; c++) for (let i = 0; i < 30; i++) X.push([randn(rng) + c * 5, randn(rng) + c * 5]);
+    const { inertias } = kmeans(X, 3, { seed: 99 });
+    let mono = true;
+    for (let i = 0; i < inertias.length - 1; i++) if (inertias[i] < inertias[i + 1] - 1e-6) mono = false;
+    return [{ name: '惯性全程非增', pass: mono, detail: `iters=${inertias.length}` }];
+  });
+
+  register('k-NN: 可分数据 100% 准确', () => {
+    const { X, y } = genBinary(321);
+    const model = knnFit(X, y);
+    const pred = knnPredict(model, X, 3);
+    const acc = pred.filter((p, i) => p === y[i]).length / y.length;
+    return [{ name: '训练集准确率', pass: acc === 1, detail: (acc * 100).toFixed(0) + '%' }];
+  });
+
+  register('PCA: 主成分标准正交', () => {
+    const rng = mulberry32(55);
+    const X = [];
+    for (let i = 0; i < 100; i++) {
+      const t = rng();
+      X.push([2 * t + randn(rng) * 0.01, 3 * t + randn(rng) * 0.01, randn(rng) * 0.01]);
+    }
+    const { comps } = pca(X, 2);
+    let maxViol = 0;
+    for (let a = 0; a < comps.length; a++)
+      for (let b = 0; b < comps.length; b++) {
+        const v = dot(comps[a], comps[b]);
+        const target = a === b ? 1 : 0;
+        maxViol = Math.max(maxViol, Math.abs(v - target));
+      }
+    return [{ name: '主轴正交/单位范数违例', pass: maxViol < 1e-9, detail: maxViol.toExponential(2) }];
+  });
+
+  register('朴素贝叶斯: 高斯可分', () => {
+    const rng = mulberry32(2024);
+    const X = [], y = [];
+    for (let c = 0; c < 2; c++) for (let i = 0; i < 40; i++) X.push([randn(rng) + (c ? 3 : 0), randn(rng) + (c ? 3 : 0)]), y.push(c);
+    const model = nbFit(X, y);
+    const acc = model.predict(X).filter((p, i) => p === y[i]).length / y.length;
+    return [{ name: '训练集准确率', pass: acc >= 0.95, detail: (acc * 100).toFixed(0) + '%' }];
+  });
+
+  register('MLP: 反向传播梯度检验', () => {
+    const { X, y } = genBinary(777);
+    const Y = y.map(c => [c === 0 ? 1 : 0, c === 1 ? 1 : 0]);
+    const rng = mulberry32(42);
+    const d = X[0].length, h = 6, c = 2;
+    const P = {
+      W1: Array.from({ length: d }, () => Array.from({ length: h }, () => randn(rng) * 0.5)),
+      b1: new Array(h).fill(0),
+      W2: Array.from({ length: h }, () => Array.from({ length: c }, () => randn(rng) * 0.5)),
+      b2: new Array(c).fill(0)
+    };
+    const flat = [...flatMat(P.W1), ...P.b1, ...flatMat(P.W2), ...P.b2];
+    const lossFn = (p) => {
+      let k = 0;
+      const W1 = unflatMat(p.slice(k, k += d * h), d, h);
+      const b1 = p.slice(k, k += h);
+      const W2 = unflatMat(p.slice(k, k += h * c), h, c);
+      const b2 = p.slice(k, k += c);
+      return mlpLoss(X, Y, { W1, b1, W2, b2 });
+    };
+    lossFn.base = flat;
+    const g = mlpGrad(X, Y, P);
+    const analytic = [...flatMat(g.W1), ...g.b1, ...flatMat(g.W2), ...g.b2];
+    const maxRel = gradientCheck(lossFn, analytic);
+    return [{ name: '梯度检验 maxRelErr', pass: maxRel < 1e-4, detail: maxRel.toExponential(2) }];
+  });
+
+  register('Transformer 注意力: 梯度检验', () => {
+    const rng = mulberry32(88);
+    const T = 6, d = 4;
+    const X = Array.from({ length: T }, () => Array.from({ length: d }, () => randn(rng)));
+    const Tgt = Array.from({ length: T }, () => Array.from({ length: d }, () => randn(rng)));
+    const mk = () => Array.from({ length: d }, () => Array.from({ length: d }, () => randn(rng) * 0.3));
+    const P = { Wq: mk(), Wk: mk(), Wv: mk(), Wo: mk() };
+    const flat = [...flatMat(P.Wq), ...flatMat(P.Wk), ...flatMat(P.Wv), ...flatMat(P.Wo)];
+    const lossFn = (p) => {
+      let k = 0; const L = d * d;
+      const Wq = unflatMat(p.slice(k, k += L), d, d);
+      const Wk = unflatMat(p.slice(k, k += L), d, d);
+      const Wv = unflatMat(p.slice(k, k += L), d, d);
+      const Wo = unflatMat(p.slice(k, k += L), d, d);
+      return attnLoss(X, Tgt, { Wq, Wk, Wv, Wo });
+    };
+    lossFn.base = flat;
+    const g = attnGrad(X, Tgt, P);
+    const analytic = [...flatMat(g.Wq), ...flatMat(g.Wk), ...flatMat(g.Wv), ...flatMat(g.Wo)];
+    const maxRel = gradientCheck(lossFn, analytic);
+    return [{ name: '注意力梯度检验 maxRelErr', pass: maxRel < 1e-4, detail: maxRel.toExponential(2) }];
+  });
+
+  function runAll() {
+    const results = [];
+    for (const c of checks) {
+      try {
+        const items = c.fn();
+        const pass = items.every(it => it.pass);
+        results.push({ name: c.name, pass, items });
+      } catch (e) {
+        results.push({ name: c.name, pass: false, items: [{ name: '异常', pass: false, detail: String(e) }] });
+      }
+    }
+    const allPass = results.every(r => r.pass);
+    const passed = results.filter(r => r.pass).length;
+    return { results, allPass, passed, total: results.length };
+  }
+
+  const AIForge = {
+    // utils
+    mulberry32, randn, zeros, eye, transpose, dot, matmul, matVec, add, sub, scale,
+    matNorm, matDiffNorm, flatMat, unflatMat, sigmoid, softmaxRows, sqDist,
+    // la
+    cholesky, choleskySolve, qr, jacobiEigen, svd,
+    // optim
+    adam, gradientCheck,
+    // models
+    linregFit, logisticLoss, logisticGrad, logisticFit, kmeans, knnFit, knnPredict,
+    pca, nbFit, mlpForward, mlpLoss, mlpGrad, attnForward, attnLoss, attnGrad,
+    // verify
+    register, runAll, checks
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = AIForge;
+  if (typeof window !== 'undefined') window.AIForge = AIForge;
+  if (typeof globalThis !== 'undefined') globalThis.AIForge = AIForge;
+  root.AIForge = AIForge;
+  return AIForge;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+
+// ---- 渲染自检表 ----
+(function renderTests(){
+  const { results, passed, total } = AIForge.runAll();
+  const host = document.getElementById('test-body');
+  const badge = document.getElementById('test-badge');
+  const allPass = passed === total;
+  badge.textContent = passed + '/' + total + (allPass ? ' 全绿 ✅' : ' ⚠️');
+  badge.className = 'badge ' + (allPass ? 'ok' : 'warn');
+  results.forEach(r => {
+    const tr = document.createElement('tr');
+    const items = r.items.map(it =>
+      '<div class="sub">' + (it.pass ? '<span class="ok-t">✓</span>' : '<span class="no-t">✗</span>')
+      + ' ' + it.name + ' <b>' + it.detail + '</b></div>').join('');
+    tr.innerHTML = '<td>' + (r.pass ? '<span class="ok-t">✅</span>' : '<span class="no-t">❌</span>') + '</td>'
+      + '<td>' + r.name + items + '</td>';
+    host.appendChild(tr);
+  });
+})();
+
+// ---- 演示1: 逻辑回归训练损失曲线 (Adam) ----
+(function trainLogistic(){
+  const rng = AIForge.mulberry32(2025);
+  const randn = AIForge.randn;
+  const X = [], y = [];
+  for (let i = 0; i < 120; i++) {
+    const lab = i % 2;
+    X.push([rng() * 2 + (lab ? 2 : 0), rng() * 2 + (lab ? 2 : 0)]);
+    y.push(lab);
+  }
+  const w = new Array(3).fill(0);
+  const state = {};
+  const losses = [];
+  const lr = 0.1;
+  for (let it = 0; it < 400; it++) {
+    const g = AIForge.logisticGrad(w, X, y);
+    AIForge.adam(w, g, state, lr);
+    if (it % 10 === 0) losses.push(AIForge.logisticLoss(w, X, y));
+  }
+  drawCurve('loss-canvas', losses, '#c0392b', '损失 Loss', '迭代');
+})();
+
+// ---- 演示2: 自注意力矩阵热力图 (Transformer) ----
+(function attentionHeat(){
+  const rng = AIForge.mulberry32(88);
+  const randn = AIForge.randn;
+  const T = 8, d = 5;
+  const X = Array.from({ length: T }, () => Array.from({ length: d }, () => randn(rng)));
+  const mk = () => Array.from({ length: d }, () => Array.from({ length: d }, () => randn(rng) * 0.3));
+  const P = { Wq: mk(), Wk: mk(), Wv: mk(), Wo: mk() };
+  const { A } = AIForge.attnForward(X, P);
+  drawHeat('attn-canvas', A);
+})();
+
+function drawCurve(id, data, color, yLabel, xLabel){
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = 240;
+  c.width = w * dpr; c.height = h * dpr; c.style.height = h + 'px';
+  const ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+  const max = Math.max(...data), min = Math.min(...data);
+  const px = 34, py = 12;
+  const X0 = px, X1 = w - py, Y0 = h - py, Y1 = py;
+  ctx.strokeStyle = '#ccc'; ctx.beginPath();
+  ctx.moveTo(X0, Y0); ctx.lineTo(X1, Y0); ctx.moveTo(X0, Y0); ctx.lineTo(X0, Y1); ctx.stroke();
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = X0 + (X1 - X0) * (i / (data.length - 1));
+    const yy = Y0 - (Y0 - Y1) * ((v - min) / (max - min || 1));
+    i === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+  });
+  ctx.stroke();
+  ctx.fillStyle = '#888'; ctx.font = '12px sans-serif';
+  ctx.fillText(max.toFixed(3), 2, Y1 + 12);
+  ctx.fillText(min.toFixed(3), 2, Y0 - 2);
+  ctx.fillText(xLabel, (X0 + X1) / 2 - 10, h - 0);
+}
+
+function drawHeat(id, A){
+  const c = document.getElementById(id);
+  const n = A.length;
+  const dpr = window.devicePixelRatio || 1;
+  const size = 240; c.width = size * dpr; c.height = size * dpr; c.style.height = size + 'px';
+  const ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+  const cell = size / n;
+  let mx = 0; A.forEach(r => r.forEach(v => { if (v > mx) mx = v; }));
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const t = A[i][j] / (mx || 1);
+    ctx.fillStyle = 'rgb(' + Math.round(255 - 100 * t) + ',' + Math.round(255 - 160 * t) + ',' + Math.round(255 - 60 * t) + ')';
+    ctx.fillRect(j * cell, i * cell, cell - 1, cell - 1);
+  }
+}
+
+</script>
+</body>
+</html>

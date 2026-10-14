@@ -1,0 +1,23 @@
+name: verify
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # 12 组数学不变量自检 — 任一失败则 CI 失败
+      - name: Run mathematical-invariant self-tests
+        run: npm test
+      # 生成单文件演示并 headless 校验浏览器可运行
+      - name: Build single-file demo
+        run: npm run demo
+      - name: Verify demo runs headlessly
+        run: node scripts/verify-demo.js

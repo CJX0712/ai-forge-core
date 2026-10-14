@@ -1,0 +1,26 @@
+{
+  "name": "ai-forge",
+  "version": "1.0.0",
+  "description": "Verification-First Zero-Dependency AI Core — pure-JS implementations of world-class math/algorithms, each proven correct by mathematical invariants.",
+  "main": "src/ai-forge.js",
+  "scripts": {
+    "test": "node test/run.js",
+    "demo": "node scripts/build-demo.js"
+  },
+  "keywords": [
+    "ai",
+    "machine-learning",
+    "linear-algebra",
+    "svd",
+    "cholesky",
+    "jacobi",
+    "gradient-check",
+    "transformer",
+    "zero-dependency"
+  ],
+  "author": "晨星 (CJX0712)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14"
+  }
+}
